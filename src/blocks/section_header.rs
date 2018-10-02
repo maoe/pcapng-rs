@@ -1,6 +1,6 @@
-use nom::IResult;
-use nom::{le_u64, le_u32, le_u16};
 use block::RawBlock;
+use nom::IResult;
+use nom::{le_u16, le_u32, le_u64};
 use options::{parse_options, Options};
 
 pub const TY: u32 = 0x0A0D0D0A;
@@ -57,7 +57,7 @@ named!(section_header_body<&[u8],SectionHeader>,
            )
       );
 
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug)]
 pub enum SectionLength {
     Bytes(u64),
     Unspecified,
@@ -81,20 +81,17 @@ pub fn parse(blk: RawBlock) -> IResult<&[u8], SectionHeader> {
     // dealing with slices by this point to our advantage
     match section_header_body(blk.body) {
         // FIXME(richo) actually do something with the leftover bytes
-        IResult::Done(left, mut block) => {
+        Ok((left, mut block)) => {
             block.block_length = blk.block_length;
             block.check_length = blk.check_length;
-            IResult::Done(left, block)
+            Ok((left, block))
         }
-        IResult::Error(e) => IResult::Error(e),
-        IResult::Incomplete(e) => IResult::Incomplete(e),
+        Err(e) => Err(e),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::IResult;
-
     use super::*;
     use block::parse_block;
     use blocks::constants::BlockType;
@@ -103,9 +100,8 @@ mod tests {
     fn test_parse_section_header() {
         let input = b"\n\r\r\n\x1c\x00\x00\x00M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x1c\x00\x00\x00";
         match parse_block(input) {
-            IResult::Done(_, block) => {
-                if let IResult::Done(left, section_header) = parse(block) {
-
+            Ok((_, block)) => {
+                if let Ok((left, section_header)) = parse(block) {
                     // Ignored because we do not currently parse the whole block
                     assert_eq!(left, b"");
                     assert_eq!(section_header.ty, BlockType::SectionHeader as u32);

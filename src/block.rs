@@ -36,46 +36,29 @@ pub struct RawBlock<'a> {
 impl<'a> RawBlock<'a> {
     pub fn parse(self) -> IResult<&'a [u8], Block<'a>> {
         match self.ty {
-            blocks::section_header::TY => {
-                match blocks::section_header::parse(self) {
-                    IResult::Done(left, blk) => IResult::Done(left, Block::SectionHeader(blk)),
-                    IResult::Error(e) => IResult::Error(e),
-                    IResult::Incomplete(e) => IResult::Incomplete(e),
-                }
-            }
+            blocks::section_header::TY => match blocks::section_header::parse(self) {
+                Ok((left, blk)) => Ok((left, Block::SectionHeader(blk))),
+                Err(e) => Err(e),
+            },
 
-            blocks::enhanced_packet::TY => {
-                match blocks::enhanced_packet::parse(self) {
-                    IResult::Done(left, blk) => IResult::Done(left, Block::EnhancedPacket(blk)),
-                    IResult::Error(e) => IResult::Error(e),
-                    IResult::Incomplete(e) => IResult::Incomplete(e),
-                }
-            }
+            blocks::enhanced_packet::TY => match blocks::enhanced_packet::parse(self) {
+                Ok((left, blk)) => Ok((left, Block::EnhancedPacket(blk))),
+                Err(e) => Err(e),
+            },
 
-            blocks::interface_stats::TY => {
-                match blocks::interface_stats::parse(self) {
-                    IResult::Done(left, blk) => {
-                        IResult::Done(left, Block::InterfaceStatistics(blk))
-                    }
-                    IResult::Error(e) => IResult::Error(e),
-                    IResult::Incomplete(e) => IResult::Incomplete(e),
-                }
-            }
+            blocks::interface_stats::TY => match blocks::interface_stats::parse(self) {
+                Ok((left, blk)) => Ok((left, Block::InterfaceStatistics(blk))),
+                Err(e) => Err(e),
+            },
 
-            blocks::interface_description::TY => {
-                match blocks::interface_description::parse(self) {
-                    IResult::Done(left, blk) => {
-                        IResult::Done(left, Block::InterfaceDescription(blk))
-                    }
-                    IResult::Error(e) => IResult::Error(e),
-                    IResult::Incomplete(e) => IResult::Incomplete(e),
-                }
-            }
-            _ => IResult::Done(&self.body[0..0], Block::UnknownBlock(self)),
+            blocks::interface_description::TY => match blocks::interface_description::parse(self) {
+                Ok((left, blk)) => Ok((left, Block::InterfaceDescription(blk))),
+                Err(e) => Err(e),
+            },
+            _ => Ok((&self.body[0..0], Block::UnknownBlock(self))),
         }
     }
 }
-
 
 named!(pub parse_block< &[u8],RawBlock >,
        do_parse!(
@@ -98,17 +81,27 @@ named!(pub parse_blocks< &[u8],Vec<RawBlock> >,
        many1!(parse_block)
        );
 
-
 #[test]
 fn test_parse_block() {
     let input = b"\n\r\r\n\x1c\x00\x00\x00M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x1c\x00\x00\x00";
     match parse_block(input) {
-        IResult::Done(left, RawBlock { ty, block_length, body, check_length }) => {
+        Ok((
+            left,
+            RawBlock {
+                ty,
+                block_length,
+                body,
+                check_length,
+            },
+        )) => {
             // Ignored because we do not currently parse the whole block
             assert_eq!(left, b"");
             assert_eq!(ty, 0x0A0D0D0A);
             assert_eq!(block_length, 28);
-            assert_eq!(body, b"M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff");
+            assert_eq!(
+                body,
+                b"M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff"
+            );
             assert_eq!(check_length, 28);
         }
         _ => {
@@ -122,15 +115,23 @@ fn test_parse_blocks() {
     let input = b"\n\r\r\n\x1c\x00\x00\x00M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x1c\x00\x00\x00\
     \n\r\r\n\x1c\x00\x00\x00M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x1c\x00\x00\x00";
     match parse_blocks(input) {
-        IResult::Done(left, blocks) => {
+        Ok((left, blocks)) => {
             assert_eq!(blocks.len(), 2);
             for i in blocks {
-                let RawBlock { ty, block_length, body, check_length } = i;
+                let RawBlock {
+                    ty,
+                    block_length,
+                    body,
+                    check_length,
+                } = i;
                 // Ignored because we do not currently parse the whole block
                 assert_eq!(left, b"");
                 assert_eq!(ty, 0x0A0D0D0A);
                 assert_eq!(block_length, 28);
-                assert_eq!(body, b"M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff");
+                assert_eq!(
+                    body,
+                    b"M<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff"
+                );
                 assert_eq!(check_length, 28);
             }
         }
@@ -144,13 +145,24 @@ fn test_parse_blocks() {
 fn test_parse_weird_length_block() {
     let input = b"\n\r\r\n\x1b\x00\x00\x00<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x00\x1b\x00\x00\x00";
     match parse_block(input) {
-        IResult::Done(left, RawBlock { ty, block_length, body, check_length }) => {
+        Ok((
+            left,
+            RawBlock {
+                ty,
+                block_length,
+                body,
+                check_length,
+            },
+        )) => {
             // Ignored because we do not currently parse the whole block
             assert_eq!(left, b"");
             assert_eq!(ty, 0x0A0D0D0A);
             assert_eq!(27, block_length);
             assert_eq!(body.len() + 12, block_length as usize);
-            assert_eq!(body, b"<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff");
+            assert_eq!(
+                body,
+                b"<+\x1a\x01\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff"
+            );
             assert_eq!(body.len() + 12, check_length as usize);
         }
         _ => {
@@ -166,9 +178,9 @@ fn test_multiple_options() {
                 \x6f\x77\x73\x20\x58\x50\x00\x00\x04\x00\x0c\x00\x54\x65\x73\x74\
                 \x30\x30\x34\x2e\x65\x78\x65\x00\x00\x00\x00\x00\x40\x00\x00\x00";
     match parse_block(input) {
-        IResult::Done(left, block) => {
+        Ok((left, block)) => {
             assert_eq!(left, b"");
-            if let IResult::Done(_, Block::SectionHeader(blk)) = block.parse() {
+            if let Ok((_, Block::SectionHeader(blk))) = block.parse() {
                 if let Some(opts) = blk.options {
                     assert_eq!(opts.options.len(), 3);
 

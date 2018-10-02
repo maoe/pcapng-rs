@@ -1,6 +1,6 @@
-use nom::{IResult, le_u32};
 use block::RawBlock;
 use blocks::constants::*;
+use nom::{le_u32, IResult};
 use options::{parse_options, Options};
 
 pub const TY: u32 = BlockType::InterfaceStatistics as u32;
@@ -60,21 +60,19 @@ pub struct InterfaceStatistics<'a> {
 pub fn parse(blk: RawBlock) -> IResult<&[u8], InterfaceStatistics> {
     match interface_stats_body(blk.body) {
         // FIXME(richo) Actually do something with the leftover bytes
-        IResult::Done(left, mut block) => {
+        Ok((left, mut block)) => {
             block.block_length = blk.block_length;
             block.check_length = blk.check_length;
-            IResult::Done(left, block)
+            Ok((left, block))
         }
-
-        IResult::Error(e) => IResult::Error(e),
-        IResult::Incomplete(e) => IResult::Incomplete(e),
+        Err(e) => Err(e),
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use nom::IResult;
+    use nom::Err;
 
     use super::*;
     use block::parse_block;
@@ -88,21 +86,24 @@ mod tests {
     \x05\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6C\x00\x00\x00";
 
         match parse_block(input) {
-            IResult::Done(_, block) => {
-                if let IResult::Done(left, interface_stats_header) = parse(block) {
-
+            Ok((_, block)) => {
+                if let Ok((left, interface_stats_header)) = parse(block) {
                     assert_eq!(left, b"");
                     assert_eq!(interface_stats_header.ty, TY);
                 } else {
                     assert!(false, "failed to parse interface_stats_header");
                 }
             }
-            IResult::Incomplete(e) => {
+            Err(Err::Incomplete(e)) => {
                 println!("Incomplete: {:?}", e);
                 assert!(false, "failed to parse interface_stats header");
             }
-            IResult::Error(e) => {
+            Err(Err::Error(e)) => {
                 println!("Error: {:?}", e);
+                assert!(false, "failed to parse interface_stats header");
+            }
+            Err(Err::Failure(e)) => {
+                println!("Failure: {:?}", e);
                 assert!(false, "failed to parse interface_stats header");
             }
         }
